@@ -1,0 +1,257 @@
+name: Unit Testing
+
+# Display a descriptive name for each manually triggered run
+run-name: >-
+  Simulation result validation run by @${{ github.actor }}
+
+# Run this workflow manually from the GitHub Actions page
+on:
+  workflow_dispatch:
+
+# Required for GitHub OIDC authentication to AWS.
+# contents: read allows the workflow to check out the repository.
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+
+  # ==========================================================
+  # JOB 1: Validate inputs.json and construct the job matrix
+  # ==========================================================
+  build-matrix:
+    runs-on: ubuntu-latest
+
+    outputs:
+      # Make the JSON matrix available to validate-measure
+      matrix: ${{ steps.matrix.outputs.matrix }}
+
+    steps:
+
+      # Copy the repository onto this GitHub-hosted runner
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # Confirm that inputs.json is a nonempty JSON array and
+      # that every measure contains the required fields.
+      - name: Validate inputs.json and create matrix
+        id: matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          INPUT_FILE="unit_test/inputs.json"
+
+          echo "Validating $INPUT_FILE..."
+
+          # Confirm that the file contains a nonempty JSON array.
+          jq -e '
+            type == "array" and length > 0
+          ' "$INPUT_FILE" > /dev/null
+
+          # Validate every input entry.
+          #
+          # measure_name must be a nonempty string.
+          # path must be a nonempty S3 URI.
+          # num_sims must be a positive integer.
+          jq -e '
+            all(
+              .[];
+              (.measure_name | type == "string" and length > 0) and
+              (.path | type == "string" and startswith("s3://")) and
+              (.num_sims | type == "number" and . > 0 and floor == .)
+            )
+          ' "$INPUT_FILE" > /dev/null
+
+          echo "Input validation passed."
+
+          # Compact the JSON array onto one line and expose it
+          # as an output for the matrix job.
+          echo "matrix=$(jq -c . "$INPUT_FILE")" >> "$GITHUB_OUTPUT"
+
+      # Add information about the matrix to the Actions summary
+      - name: Add matrix summary
+        shell: bash
+        run: |
+          {
+            echo "## Simulation validation matrix"
+            echo ""
+            echo "- Input file: \`unit_test/inputs.json\`"
+            echo "- Measures: $(jq 'length' unit_test/inputs.json)"
+            echo ""
+            echo "### Measures"
+            echo ""
+            jq -r '
+              .[] |
+              "- `\(.measure_name)`: \(.num_sims) expected simulations"
+            ' unit_test/inputs.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ==========================================================
+  # JOB 2: Run one independent job for each measure
+  # ==========================================================
+  validate-measure:
+    needs: build-matrix
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      # Do not cancel other measures when one measure fails
+      fail-fast: false
+
+      # Limit simultaneous S3 downloads and processing
+      max-parallel: 4
+
+      # Create one parallel job from each inputs.json object
+      matrix:
+        measure: ${{ fromJson(needs.build-matrix.outputs.matrix) }}
+
+    # Make the current measure values available to all steps.
+    # Using environment variables also protects paths containing
+    # spaces and special characters when properly quoted.
+    env:
+      MEASURE_NAME: ${{ matrix.measure.measure_name }}
+      S3_PATH: ${{ matrix.measure.path }}
+      EXPECTED_SIMULATIONS: ${{ matrix.measure.num_sims }}
+
+    steps:
+
+      # Each matrix entry runs on a fresh runner, so every
+      # runner must check out the repository independently.
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # Authenticate to AWS through GitHub OIDC.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_SIMULATION_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # Install the Python version used by result3.py and unit_test.py.
+      #
+      # cache: pip reuses downloaded Python packages between runs
+      # when unit_test/requirements.txt has not changed.
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: unit_test/requirements.txt
+
+      # Install the Python packages required by the scripts from requirements.txt.
+      - name: Install Python dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python -m pip install --upgrade pip
+          python -m pip install -r unit_test/requirements.txt
+
+      # Create an isolated temporary directory for this measure.
+      #
+      # Example:
+      # /home/runner/work/_temp/simulations/SWHC008-04
+      - name: Define local simulation folder
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SIM_LOCAL_FOLDER="${RUNNER_TEMP}/simulations/${MEASURE_NAME}"
+
+          mkdir -p "$SIM_LOCAL_FOLDER"
+
+          # Make this directory available to later workflow steps.
+          echo "SIM_LOCAL_FOLDER=$SIM_LOCAL_FOLDER" >> "$GITHUB_ENV"
+
+          echo "Local measure folder: $SIM_LOCAL_FOLDER"
+
+      # Copy this measure's existing files from S3 to the runner.
+      - name: Copy simulation files from S3
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Measure: $MEASURE_NAME"
+          echo "Source:  $S3_PATH"
+          echo "Target:  $SIM_LOCAL_FOLDER"
+
+          aws s3 cp \
+            "$S3_PATH" \
+            "$SIM_LOCAL_FOLDER" \
+            --recursive
+
+      # Run result3.py in SIM_LOCAL_FOLDER.
+      - name: Run result3.py
+        shell: bash
+        run: |
+          cd "$SIM_LOCAL_FOLDER"
+          python "$GITHUB_WORKSPACE/unit_test/result3.py"
+
+      # Produce error if result3.py ran without creating the expected database.
+      - name: Verify simdata.sqlite
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SIMDATA_PATH="$SIM_LOCAL_FOLDER/simdata.sqlite"
+
+          if [[ ! -s "$SIMDATA_PATH" ]]; then
+            echo "::error::result3.py did not create a nonempty simdata.sqlite file."
+            exit 1
+          fi
+
+          echo "Created: $SIMDATA_PATH"
+          ls -lh "$SIMDATA_PATH"
+
+      # Validate simdata.sqlite.
+      #
+      # Argument 1 is the folder containing simdata.sqlite.
+      # Argument 2 is num_sims from this measure's JSON entry.
+      #
+      # unit_test.py returns a nonzero exit code when validation
+      # fails, which causes this matrix job to fail.
+      - name: Run unit test
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python "$GITHUB_WORKSPACE/unit_test/unit_test.py" \
+            "$SIM_LOCAL_FOLDER" \
+            "$EXPECTED_SIMULATIONS"
+
+      # Add measure-specific details to the GitHub Actions summary.
+      - name: Add success summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo "## Validation passed"
+            echo ""
+            echo "- Measure: \`$MEASURE_NAME\`"
+            echo "- Expected simulations: $EXPECTED_SIMULATIONS"
+            echo "- Database: \`simdata.sqlite\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Add a concise failure summary when a previous step fails.
+      - name: Add failure summary
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "## Validation failed"
+            echo ""
+            echo "- Measure: \`$MEASURE_NAME\`"
+            echo "- Expected simulations: $EXPECTED_SIMULATIONS"
+            echo "- Review this job's step logs for the failing check."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Delete the local measure folder.
+      - name: Clean up local files
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${SIM_LOCAL_FOLDER:-}" ]]; then
+            rm -rf "$SIM_LOCAL_FOLDER"
+            echo "Removed: $SIM_LOCAL_FOLDER"
+          fi
