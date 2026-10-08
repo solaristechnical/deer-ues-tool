@@ -1,14 +1,36 @@
 import os
 import sqlite3
+import argparse
+from pathlib import Path
 
 # ============================================================================
 # USER INPUTS
 # ============================================================================
+parser = argparse.ArgumentParser(
+    description="Validate the generated simdata.sqlite database."
+)
 
-# Folder that contains simdata file
-FOLDER_PATH = r"C:\Projects\deer-ues-tool\unit_test"
-# Number of permutations expected (check eTRM if needed)
-EXPECTED_PERMUTATIONS = 64
+parser.add_argument(
+    "folder_path",
+    type=Path,
+    help="Folder containing simdata.sqlite",
+)
+
+parser.add_argument(
+    "expected_permutations",
+    type=int,
+    help="Expected number of simulation permutations",
+)
+
+args = parser.parse_args()
+
+FOLDER_PATH = args.folder_path.resolve()
+EXPECTED_PERMUTATIONS = args.expected_permutations
+
+if not FOLDER_PATH.exists():
+    raise SystemExit(
+        f"Folder does not exist: {FOLDER_PATH}"
+    )
 
 SQLITE_FILENAME = "simdata.sqlite"
 
@@ -28,7 +50,7 @@ TABLE_REQUIREMENTS = {
 # MAIN
 # ============================================================================
 
-sqlite_path = os.path.join(FOLDER_PATH, SQLITE_FILENAME)
+sqlite_path = FOLDER_PATH / SQLITE_FILENAME
 
 print(f"\nStep 1: Looking for {SQLITE_FILENAME}...")
 
