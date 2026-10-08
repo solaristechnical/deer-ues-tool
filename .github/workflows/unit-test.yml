@@ -30,7 +30,7 @@ jobs:
 
       # Copy the repository onto this GitHub-hosted runner
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       # Confirm that inputs.json is a nonempty JSON array and
       # that every measure contains the required fields.
@@ -119,7 +119,7 @@ jobs:
       # Each matrix entry runs on a fresh runner, so every
       # runner must check out the repository independently.
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       # Authenticate to AWS through GitHub OIDC.
       - name: Configure AWS credentials
@@ -133,7 +133,7 @@ jobs:
       # cache: pip reuses downloaded Python packages between runs
       # when unit_test/requirements.txt has not changed.
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
