@@ -135,7 +135,7 @@ for table_name, rows_per_permutation in TABLE_REQUIREMENTS.items():
         if table_name == "sim_metadata":
             raise SystemExit(1)
 
-print("\nValidation complete.")
+print("\nValidation complete.") 
 
 conn.close()
 print("\nDatabase connection closed.")
