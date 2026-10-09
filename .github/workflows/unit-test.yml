@@ -176,10 +176,7 @@ jobs:
           echo "Source:  $S3_PATH"
           echo "Target:  $SIM_LOCAL_FOLDER"
 
-          aws s3 cp \
-            "$S3_PATH" \
-            "$SIM_LOCAL_FOLDER" \
-            --recursive
+          aws s3 cp "$S3_PATH" "$SIM_LOCAL_FOLDER" --recursive --only-show-errors
 
       # Run result3.py in SIM_LOCAL_FOLDER.
       - name: Run result3.py
