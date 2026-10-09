@@ -1,0 +1,47 @@
+[
+    {
+        "measure_name": "SWHC008-04-run1",
+        "path": "s3://2021-mc3-sim-bucket/DEER2026/SWHC008-04-run1/SWHC008-04/commercial measures/SWHC008-04 VSD Central Plant/PumpCtrl-Full-Std & CHWPumpCtrl-Full-Msr runs/"
+    },
+
+    {
+        "measure_name": "SWHC008-04-run2",
+        "path": "s3://2021-mc3-sim-bucket/DEER2026/SWHC008-04-run2/commercial measures/SWHC008-04 VSD Central Plant/"
+    },
+
+    {
+        "measure_name": "SWHC008-04-run3",
+        "path": "s3://2021-mc3-sim-bucket/DEER2026/SWHC008-04-run3/commercial measures/SWHC008-04 VSD Central Plant/"
+    },
+
+    {
+        "measure_name": "SWHC008-04",
+        "path": "s3://2021-mc3-sim-bucket/DEER2026/SWHC008-04/commercial measures/SWHC008-04 VSD Central Plant/"
+    },
+
+    {
+        "measure_name": "SWHC024-07",
+        "path": "s3://2021-mc3-sim-bucket/DEER2028/SWHC024-07/"
+    },
+
+    {
+        "measure_name": "SWHC031-08",
+        "path": "s3://2021-mc3-sim-bucket/DEER2028/SWHC031-08/attempt1/residential measures/SWHC031-08 Furnace/"
+    },
+
+    {
+        "measure_name": "SWHC044-08",
+        "path": "s3://2021-mc3-sim-bucket/DEER2028/SWHC044-08/residential measures/SWHC044-08 Ductless HVAC Fuel Sub/"
+    },
+
+    {
+        "measure_name": "SWHC049-09",
+        "path": "s3://2021-mc3-sim-bucket/DEER2028/SWHC049-09/"
+    },
+
+    {
+        "measure_name": "SWHC050-09",
+        "path": "s3://2021-mc3-sim-bucket/DEER2028/SWHC050-09/"
+    }
+
+]
