@@ -1115,7 +1115,7 @@ def gather_sim_data_to_sqlite_long(
                         index=False,
                         if_exists='append'
                     )
-                    
+
         tables = conn_out.execute("""
         SELECT name
         FROM sqlite_master
@@ -1125,7 +1125,7 @@ def gather_sim_data_to_sqlite_long(
 
         print("\nTables before index creation:")
         for t in tables:
-            print(t[0])
+            print(t[0], flush=True)
 
         # Add indexes after data are loaded.
         with conn_out:
