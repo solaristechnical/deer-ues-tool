@@ -183,7 +183,7 @@ jobs:
         shell: bash
         run: |
           cd "$SIM_LOCAL_FOLDER"
-          python "$GITHUB_WORKSPACE/unit_test/result3.py"
+          python "$GITHUB_WORKSPACE/deer_ues_tool/result3.py"
 
       # Produce error if result3.py ran without creating the expected database.
       - name: Verify simdata.sqlite
