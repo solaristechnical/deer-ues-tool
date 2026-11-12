@@ -29,6 +29,8 @@ classifiers = [
 ]
 dependencies = [
     "pandas",
+    "numpy",
+    "tqdm"
 ]
 
 [project.optional-dependencies]
