@@ -312,6 +312,68 @@ def postprocessing(
     df_hvac_therm["Value Name"] = "HVAC therm"
 
     # ============================================================
+    # PREPARE ORIGINAL SIM_DATA RESULTS
+    # ============================================================
+    # Rename VarName to the name expected by the post-processing SQL scripts.
+    df_long = df_simdata.rename(
+        columns={"VarName": "Value Name"}
+    )
+
+    df_long = df_long[
+        id_columns + ["Value Name", "Value"]
+    ]
+
+    # ============================================================
+    # APPEND CALCULATED RESULTS
+    # ============================================================
+    df_long = pd.concat(
+        [
+            df_long,
+            df_demand[
+                id_columns + ["Value Name", "Value"]
+            ],
+            df_hvac_kwh[
+                id_columns + ["Value Name", "Value"]
+            ],
+            df_hvac_therm[
+                id_columns + ["Value Name", "Value"]
+            ]
+        ],
+        ignore_index=True
+    )
+
+    # ============================================================
+    # ASSIGN MEASURE-SPECIFIC INPUTS
+    # ============================================================
+    df_long["MeasureName"] = Measure_name
+    df_long["NormUnit"] = Norm_unit
+    df_long["MeasureType"] = Measure_type
+
+    # Arrange the fields in the same structure expected by the processing SQL scripts.
+    df_long = df_long[
+        [
+            "MeasureName",
+            "MeasureType",
+            "BldgLoc",
+            "BldgType",
+            "Story",
+            "BldgHVAC",
+            "BldgVint",
+            "TechGroup",
+            "TechType",
+            "TechID",
+            "NormUnit",
+            "Value Name",
+            "Value"
+        ]
+    ]
+
+    print(
+        f"simdata.sqlite processed: "
+        f"{len(df_long):,} long-format rows"
+    )
+
+    # ============================================================
     # Connect to the database (or create it if it doesn't exist) 
     connection = sqlite3.connect('postprocessing.db')
 
