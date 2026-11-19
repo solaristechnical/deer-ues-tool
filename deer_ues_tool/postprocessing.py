@@ -25,6 +25,62 @@ try:
 except ImportError:
     from importlib_resources import files
 
+def load_simdata_long(Simdata_file, peak_version="CZ2025"):
+    """
+    Read simdata.sqlite and combine simulation metadata, annual results,
+    and DEER peak results into one long-format DataFrame.
+    """
+
+    with sqlite3.connect(Simdata_file) as connection:
+
+        # Annual/query results
+        df_sim = pd.read_sql_query(
+            """
+            SELECT
+                m.simID,
+                m.BldgLoc,
+                m.BldgType,
+                m.Story,
+                m.BldgHVAC,
+                m.BldgVint,
+                m.TechGroup,
+                m.TechType,
+                m.TechID,
+                d.VarName AS "Value Name",
+                d.Value AS Value
+            FROM sim_metadata AS m
+            INNER JOIN sim_data AS d
+                ON m.simID = d.simID
+            """,
+            connection
+        )
+
+        # DEER peak results
+        df_peak = pd.read_sql_query(
+            """
+            SELECT
+                m.simID,
+                m.BldgLoc,
+                m.BldgType,
+                m.Story,
+                m.BldgHVAC,
+                m.BldgVint,
+                m.TechGroup,
+                m.TechType,
+                m.TechID,
+                p.VarName AS "Value Name",
+                p.Version,
+                p.PeakDemand_kW AS Value
+            FROM sim_metadata AS m
+            INNER JOIN sim_deerpeak AS p
+                ON m.simID = p.simID
+            WHERE p.Version = ?
+            """,
+            connection,
+            params=(peak_version,)
+        )
+
+    return df_sim, df_peak
 def postprocessing(Measure_name, Measure_type, Sector, Norm_unit, Simdata_file, MeasDef_file, BT_option):
     # Unit Conversions
     J_to_kW = 1/3600000
