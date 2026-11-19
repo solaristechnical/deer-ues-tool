@@ -14,6 +14,7 @@ Revision Log:
 01-14-2026 - updated script with terminal user inputs for future UI development
 02-19-2026 - removed excess simdata files from being written and simplified normunits function
 02-25-2026 - added lookup table files and functions
+11-19-2026 - revised input from csv to long table
 '''
 
 import pandas as pd
@@ -81,21 +82,54 @@ def load_simdata_long(Simdata_file, peak_version="CZ2025"):
         )
 
     return df_sim, df_peak
-def postprocessing(Measure_name, Measure_type, Sector, Norm_unit, Simdata_file, MeasDef_file, BT_option):
-    # Unit Conversions
-    J_to_kW = 1/3600000
-    m2_to_sqft = 10.7639 # used in SQL files
-    W_to_tons = 0.0002843451 # used in SQL files
+
+
+def postprocessing(
+    Measure_name,
+    Measure_type,
+    Sector,
+    Norm_unit,
+    Simdata_file,
+    MeasDef_file,
+    BT_option
+):
+
+    # ============================================================
+    # UNIT CONVERSIONS
+    # ============================================================
     kWh_to_therms = 0.0341295763495688
 
-    # Edit simdata for measure specific calcs
-    df = pd.read_csv(Simdata_file)
-    # Convert electricity usage to kW
-    df['Demand kW'] = df['Electricity:Facility [J](Hourly)'] * J_to_kW
-    # Convert HVAC electricity usage to kWh
-    df['HVAC kWh'] = df['Electricity/Heating'] + df['Electricity/Cooling'] + df['Electricity/Fans']
-    # Convert HVAC gas usage to therms
-    df['HVAC therm'] = (df['Natural Gas/Heating'] + df['Natural Gas/Cooling'] + df['Natural Gas/Fans']) * kWh_to_therms
+    # ============================================================
+    # READ SIMDATA.SQLITE
+    # ============================================================
+    df_simdata, df_deerpeak = load_simdata_long(
+        Simdata_file=Simdata_file,
+        peak_version="CZ2025"
+    )
+
+    # Make sure the stored result values are numeric.
+    df_simdata["Value"] = pd.to_numeric(
+        df_simdata["Value"],
+        errors="coerce"
+    )
+
+    df_deerpeak["PeakDemand_kW"] = pd.to_numeric(
+        df_deerpeak["PeakDemand_kW"],
+        errors="coerce"
+    )
+
+    # Identify one simulation.
+    id_columns = [
+        "simID",
+        "BldgLoc",
+        "BldgType",
+        "Story",
+        "BldgHVAC",
+        "BldgVint",
+        "TechGroup",
+        "TechType",
+        "TechID"
+    ]
 
     # Assign user selected norm unit name
     df['MeasureName'] = Measure_name
