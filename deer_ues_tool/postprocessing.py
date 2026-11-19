@@ -131,17 +131,187 @@ def postprocessing(
         "TechID"
     ]
 
-    # Assign user selected norm unit name
-    df['MeasureName'] = Measure_name
-    df['NormUnit'] = Norm_unit
-    df['MeasureType'] = Measure_type
+    # ============================================================
+    # CALCULATE DEMAND kW
+    # ============================================================
+    df_demand = df_deerpeak.loc[
+        df_deerpeak["VarName"]
+        == "Electricity:Facility [J](Hourly)",
+        id_columns + ["PeakDemand_kW"]
+    ].copy()
 
-    # Convert revised simdata to long format
-    df_long = pd.melt(df, id_vars = ["MeasureName", "MeasureType", "BldgLoc", "BldgType", "Story", "BldgHVAC" ,
-                                        "BldgVint", "TechGroup", "TechType", "TechID","NormUnit"], var_name = "Value Name", value_name = "Value")
+    if df_demand.empty:
+        raise ValueError(
+            "No CZ2025 peak-demand results were found for "
+            "'Electricity:Facility [J](Hourly)' in sim_deerpeak."
+        )
 
-    print("simdata processed")
+    # Check that there is only one selected peak-demand row per simulation.
+    duplicate_demand = df_demand.duplicated(
+        subset=id_columns,
+        keep=False
+    )
 
+    if duplicate_demand.any():
+        duplicate_ids = (
+            df_demand.loc[duplicate_demand, "simID"]
+            .drop_duplicates()
+            .tolist()
+        )
+
+        raise ValueError(
+            "More than one peak-demand result was found for the same "
+            "simulation. Example simID values: "
+            + ", ".join(duplicate_ids[:5])
+        )
+
+    df_demand = df_demand.rename(
+        columns={"PeakDemand_kW": "Value"}
+    )
+
+    df_demand["Value Name"] = "Demand kW"
+
+    # ============================================================
+    # CALCULATE HVAC kWh
+    # ============================================================
+    # Filter the relevant electricity rows, group by simulation, and sum the Value column.
+    hvac_electric_vars = [
+        "Electricity/Heating",
+        "Electricity/Cooling",
+        "Electricity/Fans"
+    ]
+
+    df_hvac_electric_rows = df_simdata.loc[
+        df_simdata["VarName"].isin(hvac_electric_vars),
+        id_columns + ["VarName", "Value"]
+    ].copy()
+
+    if df_hvac_electric_rows.empty:
+        raise ValueError(
+            "No HVAC electricity rows were found in sim_data. "
+            "Expected VarName values: "
+            + ", ".join(hvac_electric_vars)
+        )
+
+    # Confirm that every simulation has exactly one row for each required electricity component.
+    electric_check = (
+        df_hvac_electric_rows
+        .groupby(
+            id_columns,
+            dropna=False,
+            as_index=False
+        )
+        .agg(
+            component_count=("VarName", "nunique"),
+            row_count=("VarName", "size")
+        )
+    )
+
+    bad_electric_groups = electric_check.loc[
+        (electric_check["component_count"] != len(hvac_electric_vars))
+        | (electric_check["row_count"] != len(hvac_electric_vars))
+    ]
+
+    if not bad_electric_groups.empty:
+        bad_simids = (
+            bad_electric_groups["simID"]
+            .drop_duplicates()
+            .tolist()
+        )
+
+        raise ValueError(
+            "Some simulations do not have exactly one row for each "
+            "required HVAC electricity result. Expected: "
+            + ", ".join(hvac_electric_vars)
+            + ". Example simID values: "
+            + ", ".join(bad_simids[:5])
+        )
+
+    df_hvac_kwh = (
+        df_hvac_electric_rows
+        .groupby(
+            id_columns,
+            dropna=False,
+            as_index=False
+        )["Value"]
+        .sum(min_count=len(hvac_electric_vars))
+    )
+
+    df_hvac_kwh["Value Name"] = "HVAC kWh"
+
+    # ============================================================
+    # CALCULATE HVAC THERMS
+    # ============================================================
+    # Filter and sum the relevant Natural Gas rows, then convert from kWh to therms.
+    hvac_gas_vars = [
+        "Natural Gas/Heating",
+        "Natural Gas/Cooling",
+        "Natural Gas/Fans"
+    ]
+
+    df_hvac_gas_rows = df_simdata.loc[
+        df_simdata["VarName"].isin(hvac_gas_vars),
+        id_columns + ["VarName", "Value"]
+    ].copy()
+
+    if df_hvac_gas_rows.empty:
+        raise ValueError(
+            "No HVAC natural-gas rows were found in sim_data. "
+            "Expected VarName values: "
+            + ", ".join(hvac_gas_vars)
+        )
+
+    # Confirm that every simulation has exactly one row for each required natural-gas component.
+    gas_check = (
+        df_hvac_gas_rows
+        .groupby(
+            id_columns,
+            dropna=False,
+            as_index=False
+        )
+        .agg(
+            component_count=("VarName", "nunique"),
+            row_count=("VarName", "size")
+        )
+    )
+
+    bad_gas_groups = gas_check.loc[
+        (gas_check["component_count"] != len(hvac_gas_vars))
+        | (gas_check["row_count"] != len(hvac_gas_vars))
+    ]
+
+    if not bad_gas_groups.empty:
+        bad_simids = (
+            bad_gas_groups["simID"]
+            .drop_duplicates()
+            .tolist()
+        )
+
+        raise ValueError(
+            "Some simulations do not have exactly one row for each "
+            "required HVAC natural-gas result. Expected: "
+            + ", ".join(hvac_gas_vars)
+            + ". Example simID values: "
+            + ", ".join(bad_simids[:5])
+        )
+
+    df_hvac_therm = (
+        df_hvac_gas_rows
+        .groupby(
+            id_columns,
+            dropna=False,
+            as_index=False
+        )["Value"]
+        .sum(min_count=len(hvac_gas_vars))
+    )
+
+    df_hvac_therm["Value"] = (
+        df_hvac_therm["Value"] * kWh_to_therms
+    )
+
+    df_hvac_therm["Value Name"] = "HVAC therm"
+
+    # ============================================================
     # Connect to the database (or create it if it doesn't exist) 
     connection = sqlite3.connect('postprocessing.db')
 
