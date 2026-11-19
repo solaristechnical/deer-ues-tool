@@ -374,6 +374,8 @@ def postprocessing(
     )
 
     # ============================================================
+    # CONNECT TO POST-PROCESSING DATABASE
+    # ============================================================
     # Connect to the database (or create it if it doesn't exist) 
     connection = sqlite3.connect('postprocessing.db')
 
@@ -392,6 +394,9 @@ def postprocessing(
     df_normunits = pd.read_csv(io.StringIO(files('deer_ues_tool.lookup').joinpath('NormUnits.csv').read_text()))
     df_normunits.to_sql('NormUnits', connection, if_exists="replace",index=False)
 
+    # ========================================================
+    # RESIDENTIAL
+    # ========================================================
     # Read the SQL script 
     if Sector == "Residential":
         df_res = pd.read_csv(io.StringIO(files('deer_ues_tool.lookup').joinpath('wts_res_bldg.csv').read_text()))
@@ -436,6 +441,9 @@ def postprocessing(
         except sqlite3.Error as e: 
             print(f"An error occurred: {e}")
 
+    # ========================================================
+    # COMMERCIAL
+    # ========================================================
     elif Sector == "Commercial":
         df_com = pd.read_csv(io.StringIO(files('deer_ues_tool.lookup').joinpath('wts_com_bldg_2026.csv').read_text()))
         df_com.to_sql('wts_com_bldg_2026', connection, if_exists="replace")
@@ -474,7 +482,9 @@ def postprocessing(
         except sqlite3.Error as e: 
             print(f"An error occurred: {e}")
 
-    # Output results as csv
+    # ========================================================
+    # OUTPUT RESULTS
+    # ========================================================
     df_output = pd.read_sql_query(f"SELECT * FROM {'UES'}", connection)
     df_output.to_csv(f'energysavings_{Measure_name}.csv', index=False)
     print(f"Savings calcs completed for {Measure_name}.")
